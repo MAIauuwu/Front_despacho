@@ -31,9 +31,9 @@ jobs:
       - name: Deploy en EC2 Frontend
         uses: appleboy/ssh-action@v1.0.3
         with:
-          host: ${{ secrets.ec2_host }}
+          host: ${{ secrets.EC2_HOST }}
           username: ec2-user
-          key: ${{ secrets.ec2_ssh_key }}
+          key: ${{ secrets.EC2_SSH_KEY }}
           script: |
             cd ~/front-despacho
 
