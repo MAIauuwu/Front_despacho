@@ -7,7 +7,7 @@ on:
 
 jobs:
   build-and-push:
-    name: Build & Push
+    name: Build, Push & Deploy
     runs-on: ubuntu-latest
 
     steps:
@@ -27,3 +27,15 @@ jobs:
           file: ./Dockerfile
           push: true
           tags: ${{ secrets.DOCKERHUB_USERNAME }}/front-despacho:latest
+
+      - name: Deploy en EC2 Frontend
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ec2-user
+          key: ${{ secrets.EC2_SSH_KEY }}
+          script: |
+            cd ~/front-despacho
+            docker compose pull
+            docker compose up -d --force-recreate
+            docker image prune -f
