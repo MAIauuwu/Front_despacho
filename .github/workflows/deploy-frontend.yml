@@ -6,8 +6,8 @@ on:
       - deploy
 
 jobs:
-  build-and-deploy:
-    name: Build, Push & Deploy
+  build-and-push:
+    name: Build & Push
     runs-on: ubuntu-latest
 
     steps:
@@ -27,19 +27,3 @@ jobs:
           file: ./Dockerfile
           push: true
           tags: ${{ secrets.DOCKERHUB_USERNAME }}/front-despacho:latest
-
-      - name: Deploy en EC2 Frontend
-        uses: appleboy/ssh-action@v1.0.3
-        with:
-          host: ${{ secrets.EC2_HOST }}
-          username: ec2-user
-          key: ${{ secrets.EC2_SSH_KEY }}
-          script: |
-            cd ~/front-despacho
-
-            echo "DOCKERHUB_USERNAME=${{ secrets.DOCKERHUB_USERNAME }}" > .env
-
-            docker pull ${{ secrets.DOCKERHUB_USERNAME }}/front-despacho:latest
-            docker compose down frontend
-            docker compose up -d frontend
-            docker image prune -f
