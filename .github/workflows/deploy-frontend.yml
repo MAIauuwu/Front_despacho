@@ -1,0 +1,100 @@
+name: CI/CD - Frontend Despacho
+
+on:
+  push:
+    branches:
+      - deploy
+  pull_request:
+    branches:
+      - deploy
+
+jobs:
+  # ================================
+  # ETAPA 1: BUILD + TEST (LINT)
+  # ================================
+  build-test:
+    name: Build & Test
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout codigo
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Instalar dependencias
+        run: npm ci
+
+      - name: Ejecutar Lint (Test de codigo)
+        run: npm run lint
+
+      - name: Build de produccion
+        run: npm run build
+
+      - name: Subir artefacto de build
+        uses: actions/upload-artifact@v4
+        with:
+          name: dist
+          path: dist/
+          retention-days: 3
+
+  # ================================
+  # ETAPA 2: PUSH (Docker Hub)
+  # ================================
+  push:
+    name: Push Imagen Docker
+    needs: build-test
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/deploy'
+
+    steps:
+      - name: Checkout codigo
+        uses: actions/checkout@v4
+
+      - name: Login en Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Build y Push imagen Docker
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ./Dockerfile
+          push: true
+          tags: |
+            ${{ secrets.DOCKERHUB_USERNAME }}/front-despacho:latest
+            ${{ secrets.DOCKERHUB_USERNAME }}/front-despacho:${{ github.sha }}
+
+  # ================================
+  # ETAPA 3: DEPLOY (EC2 via SSH)
+  # ================================
+  deploy:
+    name: Deploy en EC2 Frontend
+    needs: push
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/deploy'
+
+    steps:
+      - name: Deploy en EC2 Frontend
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.EC2_HOST_FRONTEND }}
+          username: ${{ secrets.EC2_USER }}
+          key: ${{ secrets.EC2_SSH_KEY_FRONTEND }}
+          script: |
+            cd ~/front-despacho
+
+            echo "DOCKERHUB_USERNAME=${{ secrets.DOCKERHUB_USERNAME }}" > .env
+            echo "VITE_API_URL=${{ secrets.VITE_API_URL }}" >> .env
+
+            docker pull ${{ secrets.DOCKERHUB_USERNAME }}/front-despacho:latest
+            docker compose down frontend
+            docker compose up -d frontend
+
+            docker image prune -f
