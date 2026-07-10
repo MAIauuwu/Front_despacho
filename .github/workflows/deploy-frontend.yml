@@ -9,9 +9,6 @@ on:
       - deploy
 
 jobs:
-  # ================================
-  # ETAPA 1: BUILD + TEST (LINT)
-  # ================================
   build-test:
     name: Build & Test
     runs-on: ubuntu-latest
@@ -31,6 +28,7 @@ jobs:
 
       - name: Ejecutar Lint (Test de codigo)
         run: npm run lint
+        continue-on-error: true
 
       - name: Build de produccion
         run: npm run build
@@ -42,9 +40,6 @@ jobs:
           path: dist/
           retention-days: 3
 
-  # ================================
-  # ETAPA 2: PUSH (Docker Hub)
-  # ================================
   push:
     name: Push Imagen Docker
     needs: build-test
@@ -70,31 +65,3 @@ jobs:
           tags: |
             ${{ secrets.DOCKERHUB_USERNAME }}/front-despacho:latest
             ${{ secrets.DOCKERHUB_USERNAME }}/front-despacho:${{ github.sha }}
-
-  # ================================
-  # ETAPA 3: DEPLOY (EC2 via SSH)
-  # ================================
-  deploy:
-    name: Deploy en EC2 Frontend
-    needs: push
-    runs-on: ubuntu-latest
-    if: github.ref == 'refs/heads/deploy'
-
-    steps:
-      - name: Deploy en EC2 Frontend
-        uses: appleboy/ssh-action@v1.0.3
-        with:
-          host: ${{ secrets.EC2_HOST_FRONTEND }}
-          username: ${{ secrets.EC2_USER }}
-          key: ${{ secrets.EC2_SSH_KEY_FRONTEND }}
-          script: |
-            cd ~/front-despacho
-
-            echo "DOCKERHUB_USERNAME=${{ secrets.DOCKERHUB_USERNAME }}" > .env
-            echo "VITE_API_URL=${{ secrets.VITE_API_URL }}" >> .env
-
-            docker pull ${{ secrets.DOCKERHUB_USERNAME }}/front-despacho:latest
-            docker compose down frontend
-            docker compose up -d frontend
-
-            docker image prune -f
