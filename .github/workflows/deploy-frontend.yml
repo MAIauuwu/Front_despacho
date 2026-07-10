@@ -4,50 +4,64 @@ on:
   push:
     branches:
       - deploy
+  pull_request:
+    branches:
+      - deploy
 
 jobs:
-  build-and-deploy:
-    name: Build, Push & Deploy
+  build-test:
+    name: Build & Test
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout código
+      - name: Checkout codigo
         uses: actions/checkout@v4
 
-      # 2. Autenticarse en Docker Hub
+      - name: Setup Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Instalar dependencias
+        run: npm ci
+
+      - name: Ejecutar Lint (Test de codigo)
+        run: npm run lint
+        continue-on-error: true
+
+      - name: Build de produccion
+        run: npm run build
+
+      - name: Subir artefacto de build
+        uses: actions/upload-artifact@v4
+        with:
+          name: dist
+          path: dist/
+          retention-days: 3
+
+  push:
+    name: Push Imagen Docker
+    needs: build-test
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/deploy'
+
+    steps:
+      - name: Checkout codigo
+        uses: actions/checkout@v4
+
       - name: Login en Docker Hub
         uses: docker/login-action@v3
         with:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
-      # 3. Construir y publicar la imagen (multi-stage, usuario no-root)
       - name: Build y Push imagen Docker
         uses: docker/build-push-action@v5
         with:
           context: .
           file: ./Dockerfile
           push: true
-          tags: ${{ secrets.DOCKERHUB_USERNAME }}/front-despacho:latest
-
-      # 4. Desplegar en la instancia EC2 de Frontend vía SSH
-      - name: Deploy en EC2 Frontend
-        uses: appleboy/ssh-action@v1.0.3
-        with:
-          host: ${{ secrets.EC2_HOST_FRONTEND }}
-          username: ${{ secrets.EC2_USER }}
-          key: ${{ secrets.EC2_SSH_KEY_FRONTEND }}
-          script: |
-            cd ~/front-despacho
-
-            # Escribir variables de entorno
-            echo "DOCKERHUB_USERNAME=${{ secrets.DOCKERHUB_USERNAME }}" > .env
-            echo "VITE_API_URL=${{ secrets.VITE_API_URL }}" >> .env
-
-            # Actualizar imagen y reiniciar contenedor
-            docker pull ${{ secrets.DOCKERHUB_USERNAME }}/front-despacho:latest
-            docker compose down frontend
-            docker compose up -d frontend
-
-            # Limpiar imágenes antiguas
-            docker image prune -f
+          tags: |
+            ${{ secrets.DOCKERHUB_USERNAME }}/front-despacho:latest
+            ${{ secrets.DOCKERHUB_USERNAME }}/front-despacho:${{ github.sha }}

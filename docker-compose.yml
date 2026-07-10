@@ -1,12 +1,15 @@
 services:
-
   frontend:
-    image: rodribaeza/front-despacho:latest
+    image: ${DOCKERHUB_USERNAME}/front-despacho:latest
     container_name: front_despacho
     restart: unless-stopped
     ports:
       - "80:8080"
     environment:
       - NODE_ENV=production
+    volumes:
+      - nginx_logs:/var/log/nginx
 
-networks: {}
+volumes:
+  nginx_logs:
+    driver: local
